@@ -16,7 +16,6 @@ class CustomerSuccessBalancing
     if can_execute?
       validate_customer_success_with_most_customers
     else
-      puts "Não é possível prosseguir com a execução, pois foram identificados os seguintes errors: #{(@errors_customer_success + @errors_customer + @errors_away_customer_success ).join(', ')}"
       -1
     end
   rescue Timeout::Error
@@ -25,6 +24,10 @@ class CustomerSuccessBalancing
 
   def can_execute?
     customer_valid? && customer_success_valid? && away_customer_success_is_valid?
+  end
+
+  def return_errors
+    (@errors_customer_success + @errors_customer + @errors_away_customer_success ).join(', ')
   end
 
   private
@@ -36,7 +39,7 @@ class CustomerSuccessBalancing
     return add_errors('customer_success', 'Quantidade de CSs informada é inválida') unless customer_success_length_is_valid?
     return add_errors('customer_success', 'IDs dos CSs são inválidos') unless customer_success_ids_is_valid?
     return add_errors('customer_success', 'Nível dos CSs são inválidos') unless customer_success_score_is_valid?
-    return add_errors('customer_success', 'Não é permitido ter CSs com níveis identicos.') if customer_success_score_duplicated?
+    return add_errors('customer_success', 'Não é permitido ter CSs com níveis idênticos.') if customer_success_score_duplicated?
 
     true
   end
@@ -210,11 +213,179 @@ class CustomerSuccessBalancingTests < Minitest::Test
     assert_equal 1, balancer.execute
   end
 
+  def test_customers_empty
+    balancer = CustomerSuccessBalancing.new(
+      build_scores([60, 40, 95, 75]),
+      build_scores([]),
+      [2, 4]
+    )
+    assert_equal -1, balancer.execute
+    assert_equal 'Deve existir ao menos 1 cliente informado', balancer.return_errors
+  end
+
+  def test_customer_success_empty
+    balancer = CustomerSuccessBalancing.new(
+      build_scores([]),
+      build_scores([60, 40, 95, 75]),
+      [2, 4]
+    )
+    assert_equal -1, balancer.execute
+    assert_equal 'Deve existir ao menos 1 CS informado', balancer.return_errors
+  end
+
+  def test_customer_success_length_invalid
+    balancer = CustomerSuccessBalancing.new(
+      build_scores(Array(1..1500)),
+      build_scores([60, 40, 95, 75]),
+      [2, 4]
+    )
+    assert_equal -1, balancer.execute
+    assert_equal 'Quantidade de CSs informada é inválida', balancer.return_errors
+  end
+
+  def test_customer_length_invalid
+    balancer = CustomerSuccessBalancing.new(
+      build_scores([60, 40, 95, 75]),
+      build_scores(Array(1..1000000)),
+      [2, 4]
+    )
+    assert_equal -1, balancer.execute
+    assert_equal 'Quantidade de clientes informada é inválida', balancer.return_errors
+  end
+
+  def test_customer_success_ids_invalid_when_id_eql_zero
+    balancer = CustomerSuccessBalancing.new(
+      build_scores_ids_with_zero_invalid([11]),
+      build_scores([60, 40, 95, 75]),
+      []
+    )
+
+    assert_equal -1, balancer.execute
+    assert_equal 'IDs dos CSs são inválidos', balancer.return_errors
+  end
+
+
+  def test_customer_ids_invalid_when_id_most_limit
+    balancer =  CustomerSuccessBalancing.new(
+      build_scores_ids_invalid(Array(1..999)),
+      build_scores([60, 40, 95, 75]),
+      []
+    )
+
+    assert_equal -1, balancer.execute
+    assert_equal 'IDs dos CSs são inválidos', balancer.return_errors
+  end
+
+  def test_customer_ids_invalid_when_id_eql_zero
+    balancer = CustomerSuccessBalancing.new(
+      build_scores([60, 40, 95, 75]),
+      build_scores_ids_with_zero_invalid([11]),
+      []
+    )
+
+    assert_equal -1, balancer.execute
+    assert_equal 'IDs dos clientes são inválidos', balancer.return_errors
+  end
+
+
+  def test_customer_success_ids_invalid_when_id_most_limit
+    balancer =  CustomerSuccessBalancing.new(
+      build_scores([60, 40, 95, 75]),
+      build_scores_ids_invalid(Array(1..999999)),
+      []
+    )
+
+    assert_equal -1, balancer.execute
+    assert_equal 'IDs dos clientes são inválidos', balancer.return_errors
+  end
+
+  def test_customer_score_invalid_when_id_eql_zero
+    balancer = CustomerSuccessBalancing.new(
+      build_scores([75]),
+      build_scores([0]),
+      []
+    )
+
+    assert_equal -1, balancer.execute
+    assert_equal 'O Tamanho dos clientes é inválido', balancer.return_errors
+  end
+
+
+  def test_customer_score_invalid_when_id_most_limit
+    balancer =  CustomerSuccessBalancing.new(
+      build_scores([60]),
+      build_scores([100000]),
+      []
+    )
+
+    assert_equal -1, balancer.execute
+    assert_equal 'O Tamanho dos clientes é inválido', balancer.return_errors
+  end
+
+  def test_customer_success_score_invalid_when_id_eql_zero
+    balancer = CustomerSuccessBalancing.new(
+      build_scores([0]),
+      build_scores([75]),
+      []
+    )
+
+    assert_equal -1, balancer.execute
+    assert_equal 'Nível dos CSs são inválidos', balancer.return_errors
+  end
+
+
+  def test_customer_success_score_invalid_when_id_most_limit
+    balancer =  CustomerSuccessBalancing.new(
+      build_scores([10000]),
+      build_scores([60]),
+      []
+    )
+
+    assert_equal -1, balancer.execute
+    assert_equal 'Nível dos CSs são inválidos', balancer.return_errors
+  end
+
+  def test_customer_success_invalid_for_score_duplicated
+    balancer =  CustomerSuccessBalancing.new(
+      build_scores([800,800]),
+      build_scores([60]),
+      []
+    )
+
+    assert_equal -1, balancer.execute
+    assert_equal 'Não é permitido ter CSs com níveis idênticos.', balancer.return_errors
+  end
+
+  def test_away_customer_success_invalid
+    balancer =  CustomerSuccessBalancing.new(
+      build_scores([9999,500,200]),
+      build_scores([60]),
+      [1,2]
+    )
+
+    assert_equal -1, balancer.execute
+    assert_equal 'Quantidade de CSs ausentes ultrapassou a quantidade máxima permitida', balancer.return_errors
+  end
+
+
+
   private
 
   def build_scores(scores)
     scores.map.with_index do |score, index|
       { id: index + 1, score: score }
+    end
+  end
+
+  def build_scores_ids_invalid(scores)
+    scores.map.with_index do |score, index|
+      { id: (index+1) * 2, score: score }
+    end
+  end
+
+  def build_scores_ids_with_zero_invalid(scores)
+    scores.map.with_index do |score, index|
+      { id: (index) * 2, score: score }
     end
   end
 end
